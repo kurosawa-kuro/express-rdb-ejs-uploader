@@ -2,35 +2,44 @@ const request = require('supertest');
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 
-// テスト用のモックPrismaClientを作成
-jest.mock('@prisma/client', () => {
-  return {
-    PrismaClient: jest.fn().mockImplementation(() => ({
-      $queryRaw: jest.fn(),
-      $disconnect: jest.fn()
-    }))
-  };
-});
+// テスト環境のセットアップ用のヘルパー関数
+const setupTestEnvironment = () => {
+  require('dotenv').config({ path: '.env.test' });
+  return new PrismaClient({
+    datasources: {
+      db: {
+        url: process.env.TEST_DATABASE_URL
+      }
+    }
+  });
+};
 
-describe('Health Check Endpoints', () => {
+// アプリケーションインスタンスを作成するヘルパー関数
+const createTestApplication = async () => {
+  const application = new (require('../app').Application)();
+  await application.initialize();
+  return application.app;
+};
+
+describe('Health Check API Tests', () => {
   let app;
   let prisma;
-  
-  beforeEach(() => {
-    // 各テストの前にExpressアプリケーションを新規作成
-    const application = new (require('../app').Application)();
-    prisma = new PrismaClient();
-    return application.initialize().then(() => {
-      app = application.app;
-    });
+
+  beforeAll(async () => {
+    prisma = setupTestEnvironment();
   });
 
-  afterEach(() => {
-    jest.clearAllMocks();
+  beforeEach(async () => {
+    app = await createTestApplication();
   });
 
-  describe('GET /health', () => {
-    it('should return 200 and healthy status', async () => {
+  afterAll(async () => {
+    await prisma.$disconnect();
+  });
+
+  // 基本的なヘルスチェックのテスト
+  describe('Basic Health Check', () => {
+    it('GET /health - should confirm service is running', async () => {
       const response = await request(app)
         .get('/health')
         .expect('Content-Type', /json/)
@@ -42,11 +51,9 @@ describe('Health Check Endpoints', () => {
     });
   });
 
-  describe('GET /health-db', () => {
-    it('should return 200 and healthy status when database is connected', async () => {
-      // データベース接続成功のモック
-      prisma.$queryRaw.mockResolvedValueOnce([{ 1: 1 }]);
-
+  // データベース接続のヘルスチェックのテスト
+  describe('Database Health Check', () => {
+    it('GET /health-db - should confirm database connection is healthy', async () => {
       const response = await request(app)
         .get('/health-db')
         .expect('Content-Type', /json/)
