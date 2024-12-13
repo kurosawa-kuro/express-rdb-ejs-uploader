@@ -1,0 +1,32 @@
+@baseUrl = http://localhost:3001
+@contentType = application/json
+
+### ヘルスチェック
+GET {{baseUrl}}/api/health
+Content-Type: {{contentType}}
+
+### データベースヘルスチェック
+GET {{baseUrl}}/api/health-rds-postgresql
+Content-Type: {{contentType}}
+
+### Micropostの全件取得
+GET {{baseUrl}}/api/microposts
+Content-Type: {{contentType}}
+
+### Micropostの新規作成
+POST {{baseUrl}}/api/microposts
+Content-Type: {{contentType}}
+
+{
+    "title": "Test Micropost"
+}
+
+### Micropostの削除
+DELETE {{baseUrl}}/api/microposts/1
+Content-Type: {{contentType}}
+
+### CORSプリフライトチェック
+OPTIONS {{baseUrl}}/api/microposts
+Origin: http://localhost:3000
+Access-Control-Request-Method: POST
+Access-Control-Request-Headers: Content-Type
