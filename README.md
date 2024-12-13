@@ -3,10 +3,11 @@
 
 
 ```
+git clone https://github.com/kurosawa-kuro/express-rdb-ejs-uploader.git
 cd express-rdb-ejs-uploader
 
 sudo chmod +x ./env/setup-swap.sh
-./env/setup-swap.sh
+sudo ./env/setup-swap.sh
 
 chmod u+x ./env/init.sh 
 ./env/init.sh 

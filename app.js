@@ -6,6 +6,8 @@ const multer = require('multer');
 const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 require('dotenv').config();
+const { S3Client } = require('@aws-sdk/client-s3');
+const multerS3 = require('multer-s3');
 
 // ファイルアップロードの検証を担当するクラス
 class FileValidator {
@@ -21,18 +23,31 @@ class FileValidator {
 
 // ファイル保存の責務を持つクラス
 class FileStorage {
+  static createS3Client() {
+    return new S3Client({
+      region: process.env.AWS_REGION,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
+      }
+    });
+  }
+
   static createStorage() {
-    return multer.diskStorage({
-      destination: (req, file, cb) => {
-        cb(null, 'uploads/');
+    const s3 = this.createS3Client();
+    
+    return multerS3({
+      s3: s3,
+      bucket: process.env.AWS_BUCKET_NAME,
+      contentType: multerS3.AUTO_CONTENT_TYPE,
+      metadata: (req, file, cb) => {
+        cb(null, { fieldName: file.fieldname });
       },
-      filename: (req, file, cb) => {
+      key: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
         cb(null, uniqueSuffix + path.extname(file.originalname));
       }
     });
-
-    
   }
 
   static createUploader() {
@@ -137,7 +152,7 @@ class MicropostController {
 
   createMicropost = asyncHandler(async (req, res) => {
     const { title } = req.body;
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const imageUrl = req.file ? req.file.location : null;
     
     if (!title) {
       return res.status(400).json({ error: 'Title is required' });
@@ -154,7 +169,7 @@ class MicropostController {
 
   createMicropostWeb = asyncHandler(async (req, res) => {
     const { title } = req.body;
-    const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
+    const imageUrl = req.file ? req.file.location : null;
     
     await this.micropostService.createMicropost(title, imageUrl);
     res.redirect('/');
