@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ファイルの存在確認
-if [ ! -f .env.sample ]; then
-    echo "Error: .env.sample file not found"
+if [ ! -f ./env/.env.sample ]; then
+    echo "Error: ./env/.env.sample file not found"
     exit 1
 fi
 
@@ -17,13 +17,17 @@ if [ -f .env ]; then
 fi
 
 # .env.sampleを.envにコピー
-cp .env.sample .env
+cp ./env/.env.sample .env
 echo "Successfully created .env file from .env.sample"
+
+# .env.test.sampleを.env.testにコピー
+cp ./env/.env.test.sample .env.test
+echo "Successfully created .env.test file from .env.test.sample"
 
 # パッケージのインストール
 npm install
 
-# マイグレーションの実行（-y オプションを削除）
+# マイグレーションの実行
 npx prisma migrate dev --name init
 
 # Prisma Clientの生成
