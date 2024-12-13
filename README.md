@@ -6,5 +6,9 @@ chmod u+x ./env/init.sh
 ```
 
 ```
-node app.js
+ npm run dev
+```
+
+```
+ npm run test
 ```
