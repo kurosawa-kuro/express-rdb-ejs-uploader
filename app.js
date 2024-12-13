@@ -1,7 +1,5 @@
 const express = require('express');
 const asyncHandler = require('express-async-handler');
-const helmet = require('helmet');
-const cors = require('cors');
 const morgan = require('morgan');
 const path = require('path');
 const multer = require('multer');
@@ -9,57 +7,87 @@ const { PrismaClient } = require('@prisma/client');
 const fs = require('fs');
 require('dotenv').config();
 
-// アップロードの設定を管理するクラス
-class UploadConfig {
-  static storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, 'uploads/');
-    },
-    filename: (req, file, cb) => {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, uniqueSuffix + path.extname(file.originalname));
-    }
-  });
+// ファイルアップロードの検証を担当するクラス
+class FileValidator {
+  static validateFileType(mimetype) {
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    return allowedTypes.includes(mimetype);
+  }
 
-  static upload = multer({
-    storage: this.storage,
-    limits: {
-      fileSize: 5 * 1024 * 1024
-    },
-    fileFilter: (req, file, cb) => {
-      const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-      if (allowedTypes.includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
-      }
-    }
-  });
+  static getFileSize() {
+    return 5 * 1024 * 1024; // 5MB
+  }
 }
 
-// サーバー設定を管理するクラス
-class ServerConfig {
-  static configureServer(app) {
+// ファイル保存の責務を持つクラス
+class FileStorage {
+  static createStorage() {
+    return multer.diskStorage({
+      destination: (req, file, cb) => {
+        cb(null, 'uploads/');
+      },
+      filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + path.extname(file.originalname));
+      }
+    });
+
+    
+  }
+
+  static createUploader() {
+    return multer({
+      storage: this.createStorage(),
+      limits: {
+        fileSize: FileValidator.getFileSize()
+      },
+      fileFilter: (req, file, cb) => {
+        if (FileValidator.validateFileType(file.mimetype)) {
+          cb(null, true);
+        } else {
+          cb(new Error('Invalid file type. Only JPEG, PNG and GIF are allowed.'));
+        }
+      }
+    });
+  }
+}
+
+// ロギングの設定を担当するクラス
+class LoggerConfig {
+  static createLogger() {
     const logFormat = ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :response-time ms :request-body';
     morgan.token('request-body', (req) => JSON.stringify(req.body));
+    return morgan(logFormat);
+  }
+}
 
-    app.use(morgan(logFormat));
+// Express設定を担当するクラス
+class ExpressConfig {
+  static configure(app) {
+    app.use(LoggerConfig.createLogger());
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
-    app.use(helmet({
-      contentSecurityPolicy: false
-    }));
-
     app.use('/uploads', express.static('uploads'));
     app.set('view engine', 'ejs');
     app.set('views', path.join(__dirname, 'views'));
   }
 }
 
-// ヘルスチェックを管理するクラス
-class HealthController {
+// ヘルスチェックの責務を持つクラス
+class HealthService {
   constructor(prisma) {
     this.prisma = prisma;
+  }
+
+  async checkDatabase() {
+    await this.prisma.$queryRaw`SELECT 1`;
+  }
+}
+
+// ヘルスチェックのエンドポイントを担当するクラス
+class HealthController {
+  constructor(healthService) {
+    this.healthService = healthService;
   }
 
   checkHealth = asyncHandler(async (req, res) => {
@@ -68,7 +96,7 @@ class HealthController {
 
   checkDbHealth = asyncHandler(async (req, res) => {
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.healthService.checkDatabase();
       res.json({ status: 'healthy' });
     } catch (err) {
       console.error('Database health check failed:', err);
@@ -77,16 +105,33 @@ class HealthController {
   });
 }
 
-// Micropostの操作を管理するクラス
-class MicropostController {
+// Micropostのビジネスロジックを担当するクラス
+class MicropostService {
   constructor(prisma) {
     this.prisma = prisma;
   }
 
-  getMicroposts = asyncHandler(async (req, res) => {
-    const microposts = await this.prisma.micropost.findMany({
+  async getAllMicroposts() {
+    return await this.prisma.micropost.findMany({
       orderBy: { createdAt: 'desc' }
     });
+  }
+
+  async createMicropost(title, imageUrl) {
+    return await this.prisma.micropost.create({
+      data: { title, imageUrl }
+    });
+  }
+}
+
+// Micropostのエンドポイントを担当するクラス
+class MicropostController {
+  constructor(micropostService) {
+    this.micropostService = micropostService;
+  }
+
+  getMicroposts = asyncHandler(async (req, res) => {
+    const microposts = await this.micropostService.getAllMicroposts();
     res.json(microposts);
   });
 
@@ -98,17 +143,12 @@ class MicropostController {
       return res.status(400).json({ error: 'Title is required' });
     }
 
-    const micropost = await this.prisma.micropost.create({
-      data: { title, imageUrl }
-    });
-    
+    const micropost = await this.micropostService.createMicropost(title, imageUrl);
     res.status(201).json(micropost);
   });
 
   showIndex = asyncHandler(async (req, res) => {
-    const microposts = await this.prisma.micropost.findMany({
-      orderBy: { createdAt: 'desc' }
-    });
+    const microposts = await this.micropostService.getAllMicroposts();
     res.render('index', { microposts });
   });
 
@@ -116,16 +156,14 @@ class MicropostController {
     const { title } = req.body;
     const imageUrl = req.file ? `/uploads/${req.file.filename}` : null;
     
-    await this.prisma.micropost.create({
-      data: { title, imageUrl }
-    });
+    await this.micropostService.createMicropost(title, imageUrl);
     res.redirect('/');
   });
 }
 
-// ルーティングを管理するクラス
-class Router {
-  static setupRoutes(app, healthController, micropostController, upload) {
+// ルーティングの設定を担当するクラス
+class RouteConfig {
+  static configure(app, healthController, micropostController, upload) {
     // APIルート
     app.get('/health', healthController.checkHealth);
     app.get('/health-db', healthController.checkDbHealth);
@@ -138,29 +176,22 @@ class Router {
   }
 }
 
-// アプリケーションのメインクラス
+// エラーハンドリングを担当するクラス
+class ErrorHandler {
+  static configure(app) {
+    app.use((err, req, res, next) => {
+      console.error(err.stack);
+      res.status(500).json({ error: err.message });
+    });
+  }
+}
+
+// アプリケーションのライフサイクルを管理するクラス
 class Application {
   constructor() {
     this.prisma = new PrismaClient();
     this.app = express();
     this.port = process.env.PORT || 3001;
-  }
-
-  async initialize() {
-    this.ensureUploadDirectory();
-    ServerConfig.configureServer(this.app);
-    
-    const healthController = new HealthController(this.prisma);
-    const micropostController = new MicropostController(this.prisma);
-    
-    Router.setupRoutes(
-      this.app,
-      healthController,
-      micropostController,
-      UploadConfig.upload
-    );
-
-    this.setupErrorHandler();
   }
 
   ensureUploadDirectory() {
@@ -169,11 +200,24 @@ class Application {
     }
   }
 
-  setupErrorHandler() {
-    this.app.use((err, req, res, next) => {
-      console.error(err.stack);
-      res.status(500).json({ error: err.message });
-    });
+  async initialize() {
+    this.ensureUploadDirectory();
+    ExpressConfig.configure(this.app);
+    
+    const healthService = new HealthService(this.prisma);
+    const healthController = new HealthController(healthService);
+    
+    const micropostService = new MicropostService(this.prisma);
+    const micropostController = new MicropostController(micropostService);
+    
+    RouteConfig.configure(
+      this.app,
+      healthController,
+      micropostController,
+      FileStorage.createUploader()
+    );
+
+    ErrorHandler.configure(this.app);
   }
 
   async start() {
@@ -189,13 +233,20 @@ class Application {
 }
 
 // アプリケーションの起動
-const app = new Application();
-app.start().catch((err) => {
-  console.error('アプリケーション起動エラー:', err);
-  process.exit(1);
-});
+if (require.main === module) {
+  const app = new Application();
+  app.start().catch((err) => {
+    console.error('アプリケーション起動エラー:', err);
+    process.exit(1);
+  });
 
-// クリーンアップ処理
-process.on('beforeExit', async () => {
-  await app.cleanup();
-});
+  // クリーンアップ処理
+  process.on('beforeExit', async () => {
+    await app.cleanup();
+  });
+}
+
+// テスト用にエクスポート
+module.exports = {
+  Application
+};
