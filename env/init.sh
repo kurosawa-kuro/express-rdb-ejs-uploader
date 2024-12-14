@@ -24,8 +24,21 @@ echo "Successfully created .env file from .env.sample"
 cp ./env/.env.test.sample .env.test
 echo "Successfully created .env.test file from .env.test.sample"
 
-# パッケージのインストール
+# 1. npmのキャッシュをクリア
+npm cache clean --force
+
+# 2. package-lock.jsonを削除して再試行
+rm package-lock.json
 npm install
+
+# 3. より少ないメモリで実行
+NODE_OPTIONS="--max-old-space-size=512" npm install
+
+# 4. 一度に1つずつインストール
+npm install --verbose --progress
+
+# パッケージのインストール
+# npm install
 
 # マイグレーションの実行
 npx prisma migrate dev --name init

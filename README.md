@@ -1,32 +1,23 @@
 # express-rdb-ejs-uploader
 
 ```
+# 1. インフラ構築
 git clone https://github.com/kurosawa-kuro/study.git
 cd study/aws-cdk/vpc-ec2-rds/assets/ansible
 ansible-playbook -vvv playbooks/main.yml
 
-# メモリ解放の為、一旦EC2を再起動
+# 2. メモリ解放の為、一旦EC2を再起動
 sudo reboot
 
+# 3. アプリケーションのインストール
 git clone https://github.com/kurosawa-kuro/express-rdb-ejs-uploader.git
 cd express-rdb-ejs-uploader
 
+# 4. メモリ解放の為、swapファイルを作成
 sudo chmod +x ./env/setup-swap.sh
 sudo ./env/setup-swap.sh
 
-# 1. npmのキャッシュをクリア
-npm cache clean --force
-
-# 2. package-lock.jsonを削除して再試行
-rm package-lock.json
-npm install
-
-# 3. より少ないメモリで実行
-NODE_OPTIONS="--max-old-space-size=512" npm install
-
-# 4. 一度に1つずつインストール
-npm install --verbose --progress
-
+# 5. アプリケーションの初期化
 chmod u+x ./env/init.sh 
 ./env/init.sh 
 ```
