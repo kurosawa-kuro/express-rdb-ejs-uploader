@@ -9,6 +9,31 @@ cd express-rdb-ejs-uploader
 sudo chmod +x ./env/setup-swap.sh
 sudo ./env/setup-swap.sh
 
+
+# NodeSourceリポジトリのセットアップ
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+
+# Node.jsのインストール
+sudo dnf install -y nodejs
+
+# バージョン確認
+node --version  # v20.x.x
+npm --version   # 10.x.x
+
+
+# 1. npmのキャッシュをクリア
+npm cache clean --force
+
+# 2. package-lock.jsonを削除して再試行
+rm package-lock.json
+npm install
+
+# 3. より少ないメモリで実行
+NODE_OPTIONS="--max-old-space-size=512" npm install
+
+# 4. 一度に1つずつインストール
+npm install --verbose --progress
+
 chmod u+x ./env/init.sh 
 ./env/init.sh 
 ```
